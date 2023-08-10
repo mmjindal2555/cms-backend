@@ -78,4 +78,20 @@ public class GlobalExceptionHandlerTest {
         assertEquals("unauth", responseBody.getMessage());
         assertEquals(HttpStatus.UNAUTHORIZED, responseBody.getStatus());
     }
+
+    @Test
+    void testISE() {
+        RuntimeException exception = new RuntimeException("unauth");
+        // WebRequest webRequest = mock(WebRequest.class);
+
+        ResponseEntity<ErrorResponse> responseEntity = exceptionHandler.ise(exception);
+
+        assertNotNull(responseEntity);
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, responseEntity.getStatusCode());
+
+        ErrorResponse responseBody = responseEntity.getBody();
+        assertNotNull(responseBody);
+        assertEquals("unauth", responseBody.getMessage());
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, responseBody.getStatus());
+    }
 }
