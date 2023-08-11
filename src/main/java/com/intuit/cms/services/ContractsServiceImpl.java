@@ -48,11 +48,12 @@ public class ContractsServiceImpl implements ContractsService {
         Optional<Contract> originalContractOptional = contractRespository.findById(id);
         if (originalContractOptional.isPresent()) {
             Contract oContract = originalContractOptional.get();
-            validateContractModificationAuth(oContract, userID);
+            Employee user = validateContractModificationAuth(oContract, userID);
+
             if (updateContract.getDescription() != null)
                 oContract.setDescription(updateContract.getDescription());
             if (updateContract.getState() != null) {
-                validateStateChanges(oContract.getState(), updateContract.getState());
+                validateStateChanges(oContract.getState(), updateContract.getState(), user);
                 if (updateContract.getState() == State.INACTIVE) {
                     return contractMapper.toDto(inactivateContract(oContract));
                 }
@@ -105,7 +106,7 @@ public class ContractsServiceImpl implements ContractsService {
         return contractRespository.save(new Contract(newContract.getDescription(), owner));
     }
 
-    private void validateStateChanges(Contract.State current, Contract.State desired) {
+    private void validateStateChanges(Contract.State current, Contract.State desired, Employee user) {
         if (current == desired)
             return;
         if (current != State.DRAFT && desired == State.DRAFT) {
@@ -120,6 +121,8 @@ public class ContractsServiceImpl implements ContractsService {
         if (current != State.DRAFT && desired == State.APPROVED) {
             throw new RequestException(ErrorResponses.CONTRACT_NOT_DRAFT);
         }
+        if (desired == State.APPROVED && !user.isAdmin())
+            throw new UnauthorizedException(ErrorResponses.UNAUTHORIZED);
     }
 
     private Employee validateContractCreationAuth(Long userID) {
@@ -130,10 +133,11 @@ public class ContractsServiceImpl implements ContractsService {
         return owner;
     }
 
-    private void validateContractModificationAuth(Contract contract, Long userID) {
+    private Employee validateContractModificationAuth(Contract contract, Long userID) {
         Employee user = employeeRespository.findById(userID)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.EMPLOYEE_404));
         if (!contract.getServiceContractOwner().getId().equals(userID) && !user.isAdmin())
             throw new UnauthorizedException(ErrorResponses.UNAUTHORIZED);
+        return user;
     }
 }

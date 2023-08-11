@@ -158,7 +158,7 @@ public class ContractsServiceImplTests {
     }
 
     @Test
-    void testUpdateContractValidUserAndContractOwner() {
+    void testUpdateContractValidUserAndContractOwner_UNAUTH() {
 
         Employee user = new Employee();
         user.setId(2L);
@@ -178,6 +178,35 @@ public class ContractsServiceImplTests {
         updatedContract.setId(1L);
         updatedContract.setDescription("Updated description");
         updatedContract.setState(State.APPROVED);
+
+        when(contractRepository.findById(1L)).thenReturn(Optional.of(originalContract));
+        when(employeeRepository.findById(2L)).thenReturn(Optional.of(user));
+        when(contractRepository.save(any(Contract.class))).thenReturn(originalContract);
+
+        assertThrows(UnauthorizedException.class, () -> contractService.updateContract(updateContractDto, 1L, 2L));
+    }
+
+    @Test
+    void testUpdateContractValidUserAndContractOwner() {
+
+        Employee user = new Employee();
+        user.setId(2L);
+        user.setAccessScopes(new Employee.Scope[]{Employee.Scope.SERVICE_OWNER});
+
+        Contract originalContract = new Contract();
+        originalContract.setId(1L);
+        originalContract.setDescription("Original description");
+        originalContract.setState(State.APPROVED);
+        originalContract.setServiceContractOwner(user);
+
+        ContractUpsertDTO updateContractDto = new ContractUpsertDTO();
+        updateContractDto.setDescription("Updated description");
+        updateContractDto.setState(State.ACTIVE);
+
+        Contract updatedContract = new Contract();
+        updatedContract.setId(1L);
+        updatedContract.setDescription("Updated description");
+        updatedContract.setState(State.ACTIVE);
 
         when(contractRepository.findById(1L)).thenReturn(Optional.of(originalContract));
         when(employeeRepository.findById(2L)).thenReturn(Optional.of(user));
