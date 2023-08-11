@@ -303,7 +303,7 @@ public class ContractsServiceImplTests {
         when(contractRepository.save(any(Contract.class))).thenReturn(updatedContract);
         when(employeeRepository.findById(2L)).thenReturn(Optional.of(user));
 
-        assertThrows(ResourceNotFoundException.class, () -> contractService.updateContract(updateContractDto, 1L, 2L));
+        assertThrows(RequestException.class, () -> contractService.updateContract(updateContractDto, 1L, 2L));
     }
 
     @Test

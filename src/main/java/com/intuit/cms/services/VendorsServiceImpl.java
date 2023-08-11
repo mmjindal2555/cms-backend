@@ -48,48 +48,24 @@ public class VendorsServiceImpl implements VendorsService {
     @Override
     public VendorGetDTO updateVendorAssignment(VendorAssignmentDTO updateVendor, Long id, Long userID) {
         Vendor v = vendorRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.VENDOR_404));
-
-        Employee user = employeeRespository.findById(userID)
-            .orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.EMPLOYEE_404));
-
         Contract currentContract = v.getServiceContract();
-        if(currentContract != null && currentContract.getServiceContractOwner().getId() != userID &&
-            !user.isAdmin()){
-            throw new UnauthorizedException(ErrorResponses.UNAUTHORIZED);
-        }
-
+        validateContractModificationAuth(currentContract, userID);
         if(updateVendor.isOffboardingVendor()) {
-
-            if(currentContract == null || updateVendor.getContractID() == null || currentContract.getId() != updateVendor.getContractID()){
+            if(currentContract == null || updateVendor.getContractID() == null || currentContract.getId() != updateVendor.getContractID())
                 throw new RequestException(ErrorResponses.INCORRECT_MAPPING);
-            }
             v.setServiceContract(null);
-
             return vendorMapper.toDto(vendorRepository.save(v));
         }
-
         Contract newContract = contractRepository.findById(updateVendor.getNewServiceContractID()).orElse(null);
-
-        if(newContract != null && newContract.getServiceContractOwner().getId() != userID &&
-            !user.isAdmin()){
-            throw new UnauthorizedException(ErrorResponses.UNAUTHORIZED);
-        }
-
-        if(newContract == null) {
+        validateContractModificationAuth(newContract, userID);
+        if(newContract == null)
             throw new ResourceNotFoundException(ErrorResponses.CONTRACT_404);
-        }
-
-        if(updateVendor.getContractID() != null && (currentContract == null || currentContract.getId() != updateVendor.getContractID() )){
+        if(updateVendor.getContractID() != null && (currentContract == null || currentContract.getId() != updateVendor.getContractID() ))
             throw new RequestException(ErrorResponses.INCORRECT_MAPPING);
-        }
-
-        if(newContract.getState() != Contract.State.ACTIVE) {
+        if(newContract.getState() != Contract.State.ACTIVE)
             throw new RequestException(ErrorResponses.CONTRACT_NOT_ACTIVE);
-        }
-
         v.setServiceContract(newContract);
         return vendorMapper.toDto(vendorRepository.save(v));
-
     }
 
     @Override
@@ -123,6 +99,12 @@ public class VendorsServiceImpl implements VendorsService {
     }
 
     private Vendor createVendorService(VendorUpsertDTO newVendor, Long userID){
+        validateCreateVendorParams(newVendor);
+        validateCreateVendorAuth(newVendor, userID);
+        return addVendor(newVendor);
+    }
+
+    private void validateCreateVendorParams(VendorUpsertDTO newVendor) {
         if(newVendor.getFirstName() == null || newVendor.getFirstName().trim().isEmpty()) {
             throw new RequestException(ErrorResponses.INVALID_ARGUMENTS);
         }
@@ -132,18 +114,25 @@ public class VendorsServiceImpl implements VendorsService {
         if(newVendor.getRole() == null || newVendor.getRole().trim().isEmpty()) {
             throw new RequestException(ErrorResponses.INVALID_ARGUMENTS);
         }
-        Employee owner = employeeRespository.findById(userID)
-            .orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.EMPLOYEE_404));
-
         if(newVendor.getStartDate() < SystemConstants.ORG_START_TIME)
             throw new RequestException(ErrorResponses.DATE_TOO_OLD);
-
         if(newVendor.getStartDate() > (System.currentTimeMillis()/1000 + SystemConstants.A_YEARS_TIME))
             throw new RequestException(ErrorResponses.DATE_TOO_FUTURISTIC);
+    }
 
-        if(owner.isAdmin()) {
-            return addVendor(newVendor);
-        } else {
+    private void validateCreateVendorAuth(VendorUpsertDTO newVendor, Long userID) {
+        Employee owner = employeeRespository.findById(userID)
+            .orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.EMPLOYEE_404));
+        if(!owner.isAdmin()){
+            throw new UnauthorizedException(ErrorResponses.UNAUTHORIZED);
+        }
+    }
+
+    private void validateContractModificationAuth(Contract contract, Long userID) {
+        Employee user = employeeRespository.findById(userID)
+            .orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.EMPLOYEE_404));
+        if(contract != null && contract.getServiceContractOwner().getId() != userID &&
+            !user.isAdmin()){
             throw new UnauthorizedException(ErrorResponses.UNAUTHORIZED);
         }
     }

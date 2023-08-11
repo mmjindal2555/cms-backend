@@ -24,7 +24,7 @@ import com.intuit.cms.repositories.EmployeeRepository;
 import com.intuit.cms.repositories.VendorRepository;
 
 @Service
-public class ContractsServiceImpl implements ContractsService{
+public class ContractsServiceImpl implements ContractsService {
 
     @Autowired
     ContractRepository contractRespository;
@@ -46,40 +46,32 @@ public class ContractsServiceImpl implements ContractsService{
     @Override
     public ContractGetDTO updateContract(ContractUpsertDTO updateContract, Long id, Long userID) {
         Optional<Contract> originalContractOptional = contractRespository.findById(id);
-        Employee user = employeeRespository.findById(userID)
-                        .orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.EMPLOYEE_404));
-
         if (originalContractOptional.isPresent()) {
             Contract oContract = originalContractOptional.get();
-
-            if (!oContract.getServiceContractOwner().getId().equals(userID) && !user.isAdmin()){
-                    throw new UnauthorizedException(ErrorResponses.UNAUTHORIZED);
-            }
-
-            if (updateContract.getDescription() != null) {
+            validateContractModificationAuth(oContract, userID);
+            if (updateContract.getDescription() != null)
                 oContract.setDescription(updateContract.getDescription());
-            }
-
             if (updateContract.getState() != null) {
                 validateStateChanges(oContract.getState(), updateContract.getState());
-                if(updateContract.getState() == State.INACTIVE) {
+                if (updateContract.getState() == State.INACTIVE) {
                     return contractMapper.toDto(inactivateContract(oContract));
                 }
                 oContract.setState(updateContract.getState());
             }
             return contractMapper.toDto(contractRespository.save(oContract));
         } else {
-            if(updateContract.getDescription() != null){
+            if (updateContract.getDescription() != null) {
                 Contract c = createContractService(updateContract, userID);
                 return contractMapper.toDto(c);
             }
-            throw new ResourceNotFoundException(ErrorResponses.CONTRACT_404);
+            throw new RequestException(ErrorResponses.INVALID_ARGUMENTS);
         }
     }
 
     @Override
     public ContractGetDTO getContractByID(Long id) {
-        Contract c = contractRespository.findById(id).orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.CONTRACT_404));
+        Contract c = contractRespository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.CONTRACT_404));
         return contractMapper.toDto(c);
     }
 
@@ -95,9 +87,9 @@ public class ContractsServiceImpl implements ContractsService{
     }
 
     @Transactional
-    private Contract inactivateContract(Contract c){
-        Vendor[] vendors =  c.getAssignedVendors().toArray(new Vendor[c.getAssignedVendors().size()]);
-        for(Vendor v: vendors){
+    private Contract inactivateContract(Contract c) {
+        Vendor[] vendors = c.getAssignedVendors().toArray(new Vendor[c.getAssignedVendors().size()]);
+        for (Vendor v : vendors) {
             v.setServiceContract(null);
             vendorRepository.save(v);
         }
@@ -106,32 +98,42 @@ public class ContractsServiceImpl implements ContractsService{
     }
 
     private Contract createContractService(ContractUpsertDTO newContract, Long userID) {
-        if(newContract.getDescription() == null || newContract.getDescription().trim().isEmpty()) {
+        if (newContract.getDescription() == null || newContract.getDescription().trim().isEmpty()) {
             throw new RequestException(ErrorResponses.INVALID_ARGUMENTS);
         }
-        Employee owner = employeeRespository.findById(userID)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.EMPLOYEE_404));
-        if (owner.isAdmin() || owner.isServiceOwner()) {
-            return contractRespository.save(new Contract(newContract.getDescription(), owner));
-        } else {
-            throw new UnauthorizedException(ErrorResponses.UNAUTHORIZED);
-        }
+        Employee owner = validateContractCreationAuth(userID);
+        return contractRespository.save(new Contract(newContract.getDescription(), owner));
     }
 
     private void validateStateChanges(Contract.State current, Contract.State desired) {
-        if(current == desired) return;
-        if(current != State.DRAFT && desired == State.DRAFT){
+        if (current == desired)
+            return;
+        if (current != State.DRAFT && desired == State.DRAFT) {
             throw new RequestException(ErrorResponses.CONTRACT_CANT_BE_MADE_TO_DRAFT);
         }
-        if(current != State.ACTIVE && desired == State.INACTIVE){
+        if (current != State.ACTIVE && desired == State.INACTIVE) {
             throw new RequestException(ErrorResponses.CONTRACT_NOT_ACTIVE);
         }
-        if(current != State.APPROVED && desired == State.ACTIVE){
+        if (current != State.APPROVED && desired == State.ACTIVE) {
             throw new RequestException(ErrorResponses.CONTRACT_NOT_APPROVED);
         }
-        if(current != State.DRAFT && desired == State.APPROVED){
+        if (current != State.DRAFT && desired == State.APPROVED) {
             throw new RequestException(ErrorResponses.CONTRACT_NOT_DRAFT);
         }
     }
-}
 
+    private Employee validateContractCreationAuth(Long userID) {
+        Employee owner = employeeRespository.findById(userID)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.EMPLOYEE_404));
+        if (!(owner.isAdmin() || owner.isServiceOwner()))
+            throw new UnauthorizedException(ErrorResponses.UNAUTHORIZED);
+        return owner;
+    }
+
+    private void validateContractModificationAuth(Contract contract, Long userID) {
+        Employee user = employeeRespository.findById(userID)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorResponses.EMPLOYEE_404));
+        if (!contract.getServiceContractOwner().getId().equals(userID) && !user.isAdmin())
+            throw new UnauthorizedException(ErrorResponses.UNAUTHORIZED);
+    }
+}
